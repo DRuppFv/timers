@@ -1,9 +1,11 @@
+mod tui;
+
 use std::{
-    io,
     sync::{Arc, Mutex},
     thread,
 };
 
+use anyhow::Context;
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{self, Event, KeyCode, KeyEventKind},
@@ -57,7 +59,7 @@ impl App {
         &mut self,
         terminal: &mut DefaultTerminal,
         quit: Arc<Mutex<Quit>>,
-    ) -> io::Result<()> {
+    ) -> anyhow::Result<()> {
         while !quit.lock().unwrap().bool {
             terminal.draw(|frame| self.render_frame(frame))?;
         }
@@ -82,13 +84,15 @@ impl Widget for &App {
     }
 }
 
-fn main() -> io::Result<()> {
-    let mut terminal = ratatui::init();
+fn main() -> anyhow::Result<()> {
+    let mut terminal = tui::init().context("Failed to start new terminal.")?;
 
-    let quit = Quit::default().handle_events();
+    let quit = Quit::default().handle_events(); //ERROR HANDLING TODO
 
     let app_result = App::default().run(&mut terminal, quit);
 
-    ratatui::restore();
+    if let Err(e) = tui::restore() {
+        eprint!("Failed to restore the terminal: {}", e)
+    }
     app_result
 }
