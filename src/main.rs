@@ -3,7 +3,7 @@ mod counter;
 mod quit;
 mod tui;
 
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use clap::Parser;
 use counter::Counter;
 use quit::Quit;
@@ -87,16 +87,13 @@ fn main() -> anyhow::Result<()> {
 
     let quit = Quit::default().handle_events(); //ERROR HANDLING TODO
 
-    if cli::args::Args::parse().time.is_none() {
-        return Err(anyhow!("Argument [TIME] not found."));
-    }
+    let mut contador = Counter::default();
 
-    let contador = Counter {
-        count: cli::args::Args::parse().time.unwrap().parse::<i32>()?,
-    }
-    .start_counting();
+    cli::args::Args::parse()
+        .handle_command(&mut contador)
+        .context("Bad command argument.")?;
 
-    let app_result = App::default().run(&mut terminal, contador, quit);
+    let app_result = App::default().run(&mut terminal, contador.start_counting(), quit);
 
     if let Err(e) = tui::restore() {
         eprint!("Failed to restore the terminal: {}", e)
