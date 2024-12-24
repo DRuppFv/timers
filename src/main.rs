@@ -1,15 +1,14 @@
+mod cli;
+mod counter;
+mod quit;
 mod tui;
 
-use std::{
-    sync::{Arc, Mutex},
-    thread,
-    time::Duration,
-};
-
 use anyhow::{anyhow, Context};
+use clap::Parser;
+use counter::Counter;
+use quit::Quit;
 use ratatui::{
     buffer::Buffer,
-    crossterm::event::{self, Event, KeyCode, KeyEventKind},
     layout::{Alignment, Rect},
     style::Stylize,
     symbols::border,
@@ -17,63 +16,7 @@ use ratatui::{
     widgets::{Block, Padding, Paragraph, Widget},
     Frame,
 };
-
-#[derive(Debug, Default)]
-pub struct Counter {
-    pub count: i32,
-}
-
-impl Counter {
-    pub fn start_counting(self) -> Arc<Mutex<Self>> {
-        let contador = Arc::new(Mutex::new(self));
-        {
-            let contador = Arc::clone(&contador);
-            std::thread::spawn(move || loop {
-                std::thread::sleep(Duration::from_secs(1));
-                let mut locked_data = contador.lock().unwrap();
-                locked_data.count = locked_data.count - 1;
-            });
-        }
-
-        return contador;
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct Quit {
-    pub bool: bool,
-}
-
-impl Quit {
-    pub fn handle_events(self) -> Arc<Mutex<Quit>> {
-        let quit: Arc<Mutex<Quit>> = Arc::new(Mutex::new(self));
-        {
-            let quit = Arc::clone(&quit);
-            thread::spawn(move || {
-                loop {
-                    match event::read() {
-                        Ok(Event::Key(key_event)) if key_event.kind == KeyEventKind::Press => {
-                            match key_event.code {
-                                KeyCode::Char('q') => {
-                                    Quit::quit(&quit);
-                                }
-                                _ => {}
-                            }
-                        }
-                        Err(_) => {} //HANDLING NEEDED TODO
-                        _ => {}
-                    };
-                }
-            });
-        }
-
-        return quit;
-    }
-
-    pub fn quit(self_arc: &Arc<Mutex<Self>>) {
-        self_arc.lock().unwrap().bool = true;
-    }
-}
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Default)]
 pub struct App {
@@ -139,25 +82,17 @@ impl Widget for &App {
     }
 }
 
-use clap::Parser;
-#[derive(Parser, Debug)]
-#[command(about)]
-pub struct Args {
-    ///Time in seconds
-    time: Option<String>,
-}
-
 fn main() -> anyhow::Result<()> {
     let mut terminal = tui::init().context("Failed to start new terminal.")?;
 
     let quit = Quit::default().handle_events(); //ERROR HANDLING TODO
 
-    if Args::parse().time.is_none() {
+    if cli::args::Args::parse().time.is_none() {
         return Err(anyhow!("Argument [TIME] not found."));
     }
 
     let contador = Counter {
-        count: Args::parse().time.unwrap().parse::<i32>()?,
+        count: cli::args::Args::parse().time.unwrap().parse::<i32>()?,
     }
     .start_counting();
 
