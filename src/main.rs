@@ -6,6 +6,7 @@ mod tui;
 use anyhow::Context;
 use clap::Parser;
 use counter::Counter;
+use crossbeam_channel::{bounded, Receiver};
 use quit::Quit;
 use ratatui::{
     buffer::Buffer,
@@ -28,26 +29,30 @@ pub struct App {
 impl App {
     pub fn run(
         &mut self,
+        receiver: Receiver<anyhow::Error>,
         terminal: &mut tui::Tui,
         counter: Arc<Mutex<Counter>>,
         quit: Arc<Mutex<Quit>>,
     ) -> anyhow::Result<()> {
-        while !quit.lock().unwrap().bool {
+        while !quit.lock().unwrap().bool && receiver.is_empty() {
             terminal
                 .draw(|frame| self.render_frame(frame))
                 .context("Failed to render the frame.")?;
 
             let locked_counter = counter.lock().unwrap();
-
             if locked_counter.count < 0 {
                 Quit::quit(&quit);
             }
-
             //put it inside a new func later
             self.hours = (locked_counter.count / 3600) as u16;
             self.seconds = (locked_counter.count % 60) as u16;
             self.minutes = ((locked_counter.count - self.hours as i32 * 3600) / 60) as u16;
         }
+
+        if let Ok(x) = receiver.try_recv() {
+            return Err(x);
+        }
+
         Ok(())
     }
 
@@ -85,7 +90,9 @@ impl Widget for &App {
 fn main() -> anyhow::Result<()> {
     let mut terminal = tui::init().context("Failed to start new terminal.")?;
 
-    let quit = Quit::default().handle_events(); //ERROR HANDLING TODO
+    let (s, r) = bounded::<anyhow::Error>(1);
+
+    let quit = Quit::default().handle_events(s);
 
     let mut contador = Counter::default();
 
@@ -93,7 +100,7 @@ fn main() -> anyhow::Result<()> {
         .handle_command(&mut contador)
         .context("Bad command argument.")?;
 
-    let app_result = App::default().run(&mut terminal, contador.start_counting(), quit);
+    let app_result = App::default().run(r, &mut terminal, contador.start_counting(), quit);
 
     if let Err(e) = tui::restore() {
         eprint!("Failed to restore the terminal: {}", e)

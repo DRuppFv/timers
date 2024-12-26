@@ -6,4 +6,5 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.95"
 clap = { version = "4.5.23", features = ["derive"] }
+crossbeam-channel = "0.5.14"
 ratatui = "0.29.0"
