@@ -11,10 +11,32 @@ pub struct Args {
 
 impl Args {
     pub fn handle_command(&mut self, counter: &mut crate::counter::Counter) -> anyhow::Result<()> {
-        if let Some(time) = self.time.as_deref() {
+        if let Some(time_arg) = self.time.as_deref() {
             //
-            let mut seconds: i32 = 0;
+            let seconds: i32 = Args::parse_time(time_arg)?;
 
+            counter.count = seconds;
+            Ok(())
+            //
+        } else {
+            return Err(anyhow!("No duration argument provided."));
+        }
+    }
+
+    fn parse_time(time: &str) -> Result<i32, anyhow::Error> {
+        let mut seconds: i32 = 0;
+
+        if time.contains(':') {
+            let split_time = time.split(':');
+            for (i, s) in split_time.rev().enumerate() {
+                let units = s.parse::<i32>()?;
+                seconds = match i {
+                    0 => seconds + units,
+                    1 => seconds + units * 60,
+                    _ => seconds + units * 3600,
+                }
+            }
+        } else {
             let mut current_numeric = String::new();
             let mut order_str = Vec::new();
 
@@ -37,12 +59,8 @@ impl Args {
             if !current_numeric.is_empty() {
                 return Err(anyhow!("Command format not recognized."));
             };
-
-            counter.count = seconds;
-            Ok(())
-            //
-        } else {
-            return Err(anyhow!("No duration argument provided."));
         }
+
+        Ok(seconds)
     }
 }

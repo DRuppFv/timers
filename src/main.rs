@@ -98,7 +98,7 @@ fn main() -> anyhow::Result<()> {
 
     cli::args::Args::parse()
         .handle_command(&mut contador)
-        .context("Bad command argument.")?;
+        .context("Bad argument.")?;
 
     let app_result = App::default().run(r, &mut terminal, contador.start_counting(), quit);
 
