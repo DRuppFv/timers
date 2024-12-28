@@ -81,16 +81,22 @@ impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let instructions = Line::from(vec![" Quit".into(), " <Q> ".blue().bold()]);
 
+        let padding = if area.height < 6 {
+            Padding::ZERO
+        } else {
+            Padding::top((area.height - 6) / 2)
+        };
+
         let block = Block::bordered()
             .title_bottom(instructions)
             .title_alignment(Alignment::Center)
-            .padding(Padding::top(area.height / 2))
+            .padding(padding)
             .border_set(border::THICK);
 
         let counter_text = self
             .font
+            // convert() only returns err when the string is empty.
             .convert(&format!(
-                // Converts only returns err when the string is empty.
                 "{:02} : {:02} : {:02}",
                 self.hours, self.minutes, self.seconds
             ))
