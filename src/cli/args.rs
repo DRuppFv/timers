@@ -10,16 +10,14 @@ pub struct Args {
 }
 
 impl Args {
-    pub fn handle_command(&mut self, counter: &mut crate::counter::Counter) -> anyhow::Result<()> {
+    pub fn handle_command(&self, counter: &mut crate::counter::Counter) -> anyhow::Result<()> {
         if let Some(time_arg) = self.time.as_deref() {
-            //
-            let seconds: i32 = Args::parse_time(time_arg)?;
+            let seconds: i32 = Self::parse_time(time_arg)?;
 
             counter.count = seconds;
             Ok(())
-            //
         } else {
-            return Err(anyhow!("No duration argument provided."));
+            Err(anyhow!("No duration argument provided."))
         }
     }
 

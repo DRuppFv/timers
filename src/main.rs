@@ -48,7 +48,7 @@ impl App {
             //put it inside a new func later
             self.hours = (locked_counter.count / 3600) as u16;
             self.seconds = (locked_counter.count % 60) as u16;
-            self.minutes = ((locked_counter.count - self.hours as i32 * 3600) / 60) as u16;
+            self.minutes = ((locked_counter.count - i32::from(self.hours) * 3600) / 60) as u16;
         }
 
         if let Ok(x) = receiver.try_recv() {
@@ -125,7 +125,7 @@ fn main() -> anyhow::Result<()> {
     let app_result = App::new(font)?.run(r, &mut terminal, contador.start_counting(), quit);
 
     if let Err(e) = tui::restore() {
-        eprint!("Failed to restore the terminal: {}", e)
+        return Err(anyhow!("Failed to import font. Err: {}", e));
     }
     app_result
 }

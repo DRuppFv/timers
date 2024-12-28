@@ -16,10 +16,10 @@ impl Counter {
             std::thread::spawn(move || loop {
                 std::thread::sleep(Duration::from_secs(1));
                 let mut locked_data = contador.lock().unwrap();
-                locked_data.count = locked_data.count - 1;
+                locked_data.count -= 1;
             });
         }
 
-        return contador;
+        contador
     }
 }
