@@ -18,6 +18,8 @@ use ratatui::{
     widgets::{Block, Padding, Paragraph, Widget},
     Frame,
 };
+use soloud::*;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
@@ -31,10 +33,12 @@ pub struct App {
 impl App {
     pub fn run(
         &mut self,
-        receiver: Receiver<anyhow::Error>,
         terminal: &mut tui::Tui,
+        receiver: Receiver<anyhow::Error>,
         counter: Arc<Mutex<Counter>>,
         quit: Arc<Mutex<Quit>>,
+        soloud: Soloud,
+        wav: Wav,
     ) -> anyhow::Result<()> {
         while !quit.lock().unwrap().bool && receiver.is_empty() {
             terminal
@@ -43,6 +47,8 @@ impl App {
 
             let locked_counter = counter.lock().unwrap();
             if locked_counter.count < 0 {
+                soloud.play(&wav);
+                std::thread::sleep(std::time::Duration::from_secs(1));
                 Quit::quit(&quit);
             }
             //put it inside a new func later
@@ -110,25 +116,27 @@ impl Widget for &App {
 }
 
 fn main() -> anyhow::Result<()> {
+    let sl = Soloud::default()?;
+    let mut wav = audio::Wav::default();
+    wav.load(&Path::new("audio/tone.wav"))?;
+
     let mut terminal = tui::init().context("Failed to start new terminal.")?;
 
     let (s, r) = bounded::<anyhow::Error>(1);
-
     let quit = Quit::default().handle_events(s);
 
     let mut contador = Counter::default();
-
     cli::args::Args::parse()
         .handle_command(&mut contador)
         .context("Bad argument.")?;
 
     let font = FIGfont::from_file("fonts/Letters.flf");
-
     if let Err(e) = font {
         return Err(anyhow!("Failed to import font. Err: {}", e));
     }
 
-    let app_result = App::new(font)?.run(r, &mut terminal, contador.start_counting(), quit);
+    let app_result =
+        App::new(font)?.run(&mut terminal, r, contador.start_counting(), quit, sl, wav);
 
     if let Err(e) = tui::restore() {
         return Err(anyhow!("Failed to import font. Err: {}", e));
