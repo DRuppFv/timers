@@ -20,7 +20,7 @@ use ratatui::{
 };
 use soloud::*;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::{self, Arc, Mutex};
 
 #[derive(Debug)]
 pub struct App {
@@ -51,10 +51,8 @@ impl App {
                 std::thread::sleep(std::time::Duration::from_secs(1));
                 Quit::quit(&quit);
             }
-            //put it inside a new func later
-            self.hours = (locked_counter.count / 3600) as u16;
-            self.seconds = (locked_counter.count % 60) as u16;
-            self.minutes = ((locked_counter.count - i32::from(self.hours) * 3600) / 60) as u16;
+
+            self.update_clock(locked_counter);
         }
 
         if let Ok(x) = receiver.try_recv() {
@@ -67,6 +65,12 @@ impl App {
     fn render_frame(&self, frame: &mut Frame) {
         frame.render_widget(ratatui::widgets::Clear, frame.area());
         frame.render_widget(self, frame.area());
+    }
+
+    fn update_clock(&mut self, counter: sync::MutexGuard<Counter>) {
+        self.hours = (counter.count / 3600) as u16;
+        self.seconds = (counter.count % 60) as u16;
+        self.minutes = ((counter.count - i32::from(self.hours) * 3600) / 60) as u16;
     }
 
     fn new(font: Result<FIGfont, String>) -> anyhow::Result<Self> {
