@@ -36,11 +36,11 @@ impl App {
         terminal: &mut tui::Tui,
         receiver: Receiver<anyhow::Error>,
         counter: Arc<Mutex<Counter>>,
-        quit: Arc<Mutex<Quit>>,
+        quit: Arc<Quit>,
         soloud: Soloud,
         wav: Wav,
     ) -> anyhow::Result<()> {
-        while !quit.lock().unwrap().bool && receiver.is_empty() {
+        while !quit.bool.load(sync::atomic::Ordering::Relaxed) && receiver.is_empty() {
             terminal
                 .draw(|frame| self.render_frame(frame))
                 .context("Failed to render the frame.")?;
