@@ -2,18 +2,18 @@ use anyhow::anyhow;
 use crossbeam_channel::Sender;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use std::{
-    sync::{Arc, Mutex},
+    sync::{self, atomic::AtomicBool, Arc},
     thread,
 };
 
 #[derive(Debug, Default)]
 pub struct Quit {
-    pub bool: bool,
+    pub bool: AtomicBool,
 }
 
 impl Quit {
-    pub fn handle_events(self, sender: Sender<anyhow::Error>) -> Arc<Mutex<Self>> {
-        let quit: Arc<Mutex<Self>> = Arc::new(Mutex::new(self));
+    pub fn handle_events(self, sender: Sender<anyhow::Error>) -> Arc<Self> {
+        let quit: Arc<Self> = Arc::new(self);
         {
             let quit = Arc::clone(&quit);
             thread::spawn(move || loop {
@@ -41,7 +41,7 @@ impl Quit {
         quit
     }
 
-    pub fn quit(self_arc: &Arc<Mutex<Self>>) {
-        self_arc.lock().unwrap().bool = true;
+    pub fn quit(self_arc: &Arc<Self>) {
+        self_arc.bool.store(true, sync::atomic::Ordering::Relaxed);
     }
 }
