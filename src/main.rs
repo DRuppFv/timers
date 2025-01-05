@@ -24,9 +24,10 @@ use std::sync::{self, Arc, Mutex};
 
 #[derive(Debug)]
 pub struct App {
-    hours: u16,
-    minutes: u16,
-    seconds: u16,
+    hours: i16,
+    minutes: i16,
+    seconds: i16,
+    negative: bool,
     font: FIGfont,
 }
 
@@ -40,16 +41,27 @@ impl App {
         soloud: Soloud,
         wav: Wav,
     ) -> anyhow::Result<()> {
+        let mut played_once = false;
+
         while !quit.bool.load(sync::atomic::Ordering::Relaxed) && receiver.is_empty() {
             terminal
                 .draw(|frame| self.render_frame(frame))
                 .context("Failed to render the frame.")?;
 
             let locked_counter = counter.lock().unwrap();
-            if locked_counter.count < 0 {
+
+            if ((self.negative && locked_counter.count.abs() % 300 == 0)
+                || locked_counter.count == 0)
+                && !played_once
+            {
                 soloud.play(&wav);
-                std::thread::sleep(std::time::Duration::from_secs(1));
-                Quit::quit(&quit);
+                played_once = true;
+            } else if locked_counter.count.abs() % 300 != 0 {
+                played_once = false;
+            }
+
+            if locked_counter.count.is_negative() {
+                self.negative = true
             }
 
             self.update_clock(locked_counter);
@@ -68,9 +80,9 @@ impl App {
     }
 
     fn update_clock(&mut self, counter: sync::MutexGuard<Counter>) {
-        self.hours = (counter.count / 3600) as u16;
-        self.seconds = (counter.count % 60) as u16;
-        self.minutes = ((counter.count - i32::from(self.hours) * 3600) / 60) as u16;
+        self.hours = (counter.count.abs() / 3600) as i16;
+        self.seconds = (counter.count.abs() % 60) as i16;
+        self.minutes = ((counter.count.abs() - i32::from(self.hours) * 3600) / 60) as i16;
     }
 
     fn new(font: Result<FIGfont, String>) -> anyhow::Result<Self> {
@@ -83,6 +95,7 @@ impl App {
             minutes: 0,
             seconds: 0,
             font: font.unwrap(),
+            negative: false,
         })
     }
 }
@@ -103,13 +116,18 @@ impl Widget for &App {
             .padding(padding)
             .border_set(border::THICK);
 
+        let string = &format!(
+            "{}{:02}:{:02}:{:02}",
+            if self.negative { "-" } else { "" },
+            self.hours,
+            self.minutes,
+            self.seconds
+        );
+
         let counter_text = self
             .font
             // convert() only returns err when the string is empty.
-            .convert(&format!(
-                "{:02} : {:02} : {:02}",
-                self.hours, self.minutes, self.seconds
-            ))
+            .convert(string)
             .unwrap(); // -> UNWRAPPING BECAUSE I'M SURE THE STRING IS NOT EMPTY
 
         Paragraph::new(counter_text.to_text().centered().green())
