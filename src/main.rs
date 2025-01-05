@@ -116,18 +116,27 @@ impl Widget for &App {
             .padding(padding)
             .border_set(border::THICK);
 
-        let string = &format!(
-            "{}{:02}:{:02}:{:02}",
-            if self.negative { "-" } else { "" },
-            self.hours,
-            self.minutes,
-            self.seconds
-        );
+        let string = match (self.hours, self.minutes) {
+            (0, 0) => format!("{}{}", if self.negative { "-" } else { "" }, self.seconds),
+            (0, _) => format!(
+                "{}{}:{:02}",
+                if self.negative { "-" } else { "" },
+                self.minutes,
+                self.seconds
+            ),
+            _ => format!(
+                "{}{}:{:02}:{:02}",
+                if self.negative { "-" } else { "" },
+                self.hours,
+                self.minutes,
+                self.seconds
+            ),
+        };
 
         let counter_text = self
             .font
             // convert() only returns err when the string is empty.
-            .convert(string)
+            .convert(&string)
             .unwrap(); // -> UNWRAPPING BECAUSE I'M SURE THE STRING IS NOT EMPTY
 
         Paragraph::new(counter_text.to_text().centered().green())
