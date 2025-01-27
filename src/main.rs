@@ -11,11 +11,10 @@ use figlet_rs::FIGfont;
 use quit::Quit;
 use ratatui::{
     buffer::Buffer,
-    layout::{Alignment, Rect},
+    layout::Rect,
     style::Stylize,
-    symbols::border,
-    text::{Line, ToText},
-    widgets::{Block, Padding, Paragraph, Widget},
+    text::ToText,
+    widgets::{Paragraph, Widget},
     Frame,
 };
 use soloud::*;
@@ -102,19 +101,12 @@ impl App {
 
 impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let instructions = Line::from(vec![" Quit".into(), " <Q> ".blue().bold()]);
-
-        let padding = if area.height < 6 {
-            Padding::ZERO
-        } else {
-            Padding::top((area.height - 6) / 2)
-        };
-
-        let block = Block::bordered()
-            .title_bottom(instructions)
-            .title_alignment(Alignment::Center)
-            .padding(padding)
-            .border_set(border::THICK);
+        let area = Rect::new(
+            area.x + (area.width.saturating_sub(127)) / 2,
+            area.y + (area.height.saturating_sub(5) / 2),
+            126.min(area.width),
+            5.min(area.height),
+        );
 
         let string = match (self.hours, self.minutes) {
             (0, 0) => format!("{}{}", if self.negative { "-" } else { "" }, self.seconds),
@@ -141,7 +133,6 @@ impl Widget for &App {
 
         Paragraph::new(counter_text.to_text().centered().green())
             .centered()
-            .block(block)
             .render(area, buf);
     }
 }
