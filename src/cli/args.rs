@@ -7,15 +7,30 @@ pub struct Args {
     ///Time in the format __h__m__s, the order doesn't matter.
     #[arg(default_value = "15m00s")]
     time: Option<String>,
+
+    #[arg(short, long)]
+    message: Option<String>,
 }
 
 impl Args {
-    pub fn handle_command(&self, counter: &mut crate::counter::Counter) -> anyhow::Result<()> {
+    pub fn handle_command(&self) -> anyhow::Result<(i32, &str)> {
         if let Some(time_arg) = self.time.as_deref() {
             let seconds: i32 = Self::parse_time(time_arg)?;
 
-            counter.count = seconds;
-            Ok(())
+            let mut message = "";
+
+            if let Some(message_arg) = self.message.as_deref() {
+                if message_arg.chars().collect::<Vec<_>>().len() > 127 {
+                    return Err(anyhow!(
+                        "Message too long: the limit is 127 characters, yours contains {}.",
+                        message_arg.chars().collect::<Vec<_>>().len()
+                    ));
+                }
+
+                message = message_arg;
+            }
+
+            Ok((seconds, message))
         } else {
             Err(anyhow!("No duration argument provided."))
         }

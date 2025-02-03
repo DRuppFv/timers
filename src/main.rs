@@ -22,15 +22,16 @@ use std::path::Path;
 use std::sync::{self, Arc, Mutex};
 
 #[derive(Debug)]
-pub struct App {
+pub struct App<'a> {
     hours: i16,
     minutes: i16,
     seconds: i16,
     negative: bool,
     font: FIGfont,
+    message: &'a str,
 }
 
-impl App {
+impl<'a> App<'a> {
     pub fn run(
         &mut self,
         terminal: &mut tui::Tui,
@@ -84,7 +85,7 @@ impl App {
         self.minutes = ((counter.count.abs() - i32::from(self.hours) * 3600) / 60) as i16;
     }
 
-    fn new(font: Result<FIGfont, String>) -> anyhow::Result<Self> {
+    fn new(font: Result<FIGfont, String>, message_arg: &'a str) -> anyhow::Result<Self> {
         if let Err(e) = font {
             return Err(anyhow!("Failed to import font. Err: {}", e));
         }
@@ -94,14 +95,15 @@ impl App {
             minutes: 0,
             seconds: 0,
             font: font.unwrap(),
+            message: message_arg,
             negative: false,
         })
     }
 }
 
-impl Widget for &App {
+impl Widget for &App<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let area = Rect::new(
+        let timer_area = Rect::new(
             area.x + (area.width.saturating_sub(127)) / 2,
             area.y + (area.height.saturating_sub(5) / 2),
             126.min(area.width),
@@ -133,7 +135,24 @@ impl Widget for &App {
 
         Paragraph::new(counter_text.to_text().centered().green())
             .centered()
-            .render(area, buf);
+            .render(timer_area, buf);
+
+        if self.message != "" {
+            // vvv Block needed for gap between timer and mesasge
+            let block = ratatui::widgets::Block::new().padding(ratatui::widgets::Padding::top(1));
+            let message_area = Rect::new(
+                area.x + (area.width.saturating_sub(60) / 2),
+                timer_area.bottom(),
+                60.min(area.width),
+                area.height.saturating_sub(timer_area.bottom()),
+            );
+
+            Paragraph::new(self.message.white())
+                .block(block)
+                .wrap(ratatui::widgets::Wrap { trim: true })
+                .centered()
+                .render(message_area, buf);
+        }
     }
 }
 
@@ -145,10 +164,10 @@ fn main() -> anyhow::Result<()> {
     let (s, r) = bounded::<anyhow::Error>(1);
     let quit = Quit::default().handle_events(s);
 
-    let mut contador = Counter::default();
-    cli::args::Args::parse()
-        .handle_command(&mut contador)
-        .context("Bad argument.")?;
+    let parsed_args = cli::args::Args::parse();
+    let (seconds, message) = parsed_args.handle_command().context("Bad argument.")?;
+
+    let contador = Counter { count: seconds };
 
     let font = FIGfont::from_file("fonts/Letters.flf");
     if let Err(e) = font {
@@ -158,10 +177,10 @@ fn main() -> anyhow::Result<()> {
     let mut terminal = tui::init().context("Failed to start new terminal.")?;
 
     let app_result =
-        App::new(font)?.run(&mut terminal, r, contador.start_counting(), quit, sl, wav);
+        App::new(font, message)?.run(&mut terminal, r, contador.start_counting(), quit, sl, wav);
 
     if let Err(e) = tui::restore() {
-        return Err(anyhow!("Failed to import font. Err: {}", e));
+        return Err(anyhow!("Failed to restore terminal: {}", e));
     }
     app_result
 }
