@@ -142,8 +142,6 @@ fn main() -> anyhow::Result<()> {
     let mut wav = audio::Wav::default();
     wav.load(&Path::new("audio/tone.wav"))?;
 
-    let mut terminal = tui::init().context("Failed to start new terminal.")?;
-
     let (s, r) = bounded::<anyhow::Error>(1);
     let quit = Quit::default().handle_events(s);
 
@@ -156,6 +154,8 @@ fn main() -> anyhow::Result<()> {
     if let Err(e) = font {
         return Err(anyhow!("Failed to import font. Err: {}", e));
     }
+
+    let mut terminal = tui::init().context("Failed to start new terminal.")?;
 
     let app_result =
         App::new(font)?.run(&mut terminal, r, contador.start_counting(), quit, sl, wav);
