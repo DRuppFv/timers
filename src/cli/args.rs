@@ -2,12 +2,17 @@ use anyhow::anyhow;
 use clap::Parser;
 
 #[derive(Parser, Debug)]
-#[command(about)]
+#[command(
+    about = "Sets the timer time and its message.",
+    override_usage = "timers <time> [-m] <message>
+       Be sure to put <message> between double quotes."
+)]
 pub struct Args {
-    ///Time in the format __h__m__s, the order doesn't matter.
+    ///Time in format __h__m__s, order doesn't matter.
     #[arg(default_value = "15m00s")]
     time: Option<String>,
 
+    ///Message shown under the timer.
     #[arg(short, long)]
     message: Option<String>,
 }
