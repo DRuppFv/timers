@@ -5,10 +5,9 @@ mod tui;
 
 use anyhow::{anyhow, Context};
 use clap::Parser;
-use counter::Counter;
-use crossbeam_channel::{bounded, Receiver};
+use counter::{start_ticking, Counter};
 use figlet_rs::FIGfont;
-use quit::Quit;
+use quit::{AppEvent, Quit};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -19,13 +18,15 @@ use ratatui::{
 };
 use soloud::*;
 use std::path::Path;
-use std::sync::{self, Arc, Mutex};
+use std::sync::{self, Arc};
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 #[derive(Debug)]
 pub struct App<'a> {
     hours: i16,
     minutes: i16,
     seconds: i16,
+    counter: Counter,
     negative: bool,
     font: FIGfont,
     message: &'a str,
@@ -35,40 +36,44 @@ impl<'a> App<'a> {
     pub fn run(
         &mut self,
         terminal: &mut tui::Tui,
-        receiver: Receiver<anyhow::Error>,
-        counter: Arc<Mutex<Counter>>,
+        mut receiver: UnboundedReceiver<AppEvent>,
+        sender: UnboundedSender<AppEvent>,
         quit: Arc<Quit>,
         soloud: Soloud,
         wav: Wav,
     ) -> anyhow::Result<()> {
-        let mut played_once = false;
+        let handle_app_events = |app: &mut Self, event: AppEvent| -> anyhow::Result<()> {
+            match event {
+                AppEvent::TickEvent => {
+                    app.counter.count -= 1;
+                    
+                    if app.counter.count == -1 {
+                        app.negative = true;
+                        soloud.play(&wav);
+                    } else if app.counter.count % 300 == 0 && app.counter.count.is_negative() {
+                        soloud.play(&wav);
+                    }
+                }
+                AppEvent::ErrorEvent => {
+                    return Err(anyhow!("Failed to read keypress event."));
+                }
+            }
 
-        while !quit.bool.load(sync::atomic::Ordering::Relaxed) && receiver.is_empty() {
+            Ok(())
+        };
+
+        start_ticking(sender);
+
+        while !quit.bool.load(sync::atomic::Ordering::Relaxed) {
+            if let Ok(event) = receiver.try_recv() {
+                handle_app_events(self, event)?
+            };
+
             terminal
                 .draw(|frame| self.render_frame(frame))
                 .context("Failed to render the frame.")?;
 
-            let locked_counter = counter.lock().unwrap();
-
-            if ((self.negative && locked_counter.count.abs() % 300 == 0)
-                || locked_counter.count == 0)
-                && !played_once
-            {
-                soloud.play(&wav);
-                played_once = true;
-            } else if locked_counter.count.abs() % 300 != 0 {
-                played_once = false;
-            }
-
-            if locked_counter.count.is_negative() {
-                self.negative = true
-            }
-
-            self.update_clock(locked_counter);
-        }
-
-        if let Ok(x) = receiver.try_recv() {
-            return Err(x);
+            self.update_clock(self.counter.count);
         }
 
         Ok(())
@@ -79,13 +84,17 @@ impl<'a> App<'a> {
         frame.render_widget(self, frame.area());
     }
 
-    fn update_clock(&mut self, counter: sync::MutexGuard<Counter>) {
-        self.hours = (counter.count.abs() / 3600) as i16;
-        self.seconds = (counter.count.abs() % 60) as i16;
-        self.minutes = ((counter.count.abs() - i32::from(self.hours) * 3600) / 60) as i16;
+    fn update_clock(&mut self, count: i32) {
+        self.hours = (count.abs() / 3600) as i16;
+        self.seconds = (count.abs() % 60) as i16;
+        self.minutes = ((count.abs() - i32::from(self.hours) * 3600) / 60) as i16;
     }
 
-    fn new(font: Result<FIGfont, String>, message_arg: &'a str) -> anyhow::Result<Self> {
+    fn new(
+        font: Result<FIGfont, String>,
+        message_arg: &'a str,
+        seconds: i32,
+    ) -> anyhow::Result<Self> {
         if let Err(e) = font {
             return Err(anyhow!("Failed to import font. Err: {}", e));
         }
@@ -94,6 +103,7 @@ impl<'a> App<'a> {
             hours: 0,
             minutes: 0,
             seconds: 0,
+            counter: Counter { count: seconds },
             font: font.unwrap(),
             message: message_arg,
             negative: false,
@@ -156,18 +166,18 @@ impl Widget for &App<'_> {
     }
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let sl = Soloud::default()?;
     let mut wav = audio::Wav::default();
     wav.load(&Path::new("audio/tone.wav"))?;
 
-    let (s, r) = bounded::<anyhow::Error>(1);
-    let quit = Quit::default().handle_events(s);
+    let (s, r) = unbounded_channel::<AppEvent>();
+
+    let quit = Quit::default().handle_events(s.clone());
 
     let parsed_args = cli::args::Args::parse();
     let (seconds, message) = parsed_args.handle_command().context("Bad argument.")?;
-
-    let contador = Counter { count: seconds };
 
     let font = FIGfont::from_file("fonts/Letters.flf");
     if let Err(e) = font {
@@ -176,8 +186,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut terminal = tui::init().context("Failed to start new terminal.")?;
 
-    let app_result =
-        App::new(font, message)?.run(&mut terminal, r, contador.start_counting(), quit, sl, wav);
+    let app_result = App::new(font, message, seconds)?.run(&mut terminal, r, s, quit, sl, wav);
 
     if let Err(e) = tui::restore() {
         return Err(anyhow!("Failed to restore terminal: {}", e));

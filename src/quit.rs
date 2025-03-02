@@ -1,10 +1,14 @@
-use anyhow::anyhow;
-use crossbeam_channel::Sender;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use std::{
     sync::{self, atomic::AtomicBool, Arc},
     thread,
 };
+use tokio::sync::mpsc::UnboundedSender;
+
+pub enum AppEvent {
+    TickEvent,
+    ErrorEvent,
+}
 
 #[derive(Debug, Default)]
 pub struct Quit {
@@ -12,7 +16,7 @@ pub struct Quit {
 }
 
 impl Quit {
-    pub fn handle_events(self, sender: Sender<anyhow::Error>) -> Arc<Self> {
+    pub fn handle_events(self, sender: UnboundedSender<AppEvent>) -> Arc<Self> {
         let quit: Arc<Self> = Arc::new(self);
         {
             let quit = Arc::clone(&quit);
@@ -26,12 +30,8 @@ impl Quit {
                             _ => {}
                         }
                     }
-                    Err(e) => {
-                        if !sender.is_full() {
-                            sender
-                                .send(anyhow!("Failed to handle key event. Err: {}", e))
-                                .unwrap();
-                        }
+                    Err(_) => {
+                        sender.send(AppEvent::ErrorEvent).unwrap();
                     }
                     _ => {}
                 };

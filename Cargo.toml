@@ -10,3 +10,4 @@ crossbeam-channel = "0.5.14"
 figlet-rs = "0.1.5"
 ratatui = "0.29.0"
 soloud = "1.0.5"
+tokio = { version = "1", features = ["full"] }
