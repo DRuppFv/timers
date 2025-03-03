@@ -23,9 +23,6 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 #[derive(Debug)]
 pub struct App<'a> {
-    hours: i16,
-    minutes: i16,
-    seconds: i16,
     counter: Counter,
     negative: bool,
     font: FIGfont,
@@ -72,8 +69,6 @@ impl<'a> App<'a> {
             terminal
                 .draw(|frame| self.render_frame(frame))
                 .context("Failed to render the frame.")?;
-
-            self.update_clock(self.counter.count);
         }
 
         Ok(())
@@ -82,12 +77,6 @@ impl<'a> App<'a> {
     fn render_frame(&self, frame: &mut Frame) {
         frame.render_widget(ratatui::widgets::Clear, frame.area());
         frame.render_widget(self, frame.area());
-    }
-
-    fn update_clock(&mut self, count: i32) {
-        self.hours = (count.abs() / 3600) as i16;
-        self.seconds = (count.abs() % 60) as i16;
-        self.minutes = ((count.abs() - i32::from(self.hours) * 3600) / 60) as i16;
     }
 
     fn new(
@@ -100,10 +89,7 @@ impl<'a> App<'a> {
         }
 
         Ok(Self {
-            hours: 0,
-            minutes: 0,
-            seconds: 0,
-            counter: Counter { count: seconds },
+            counter: Counter::new(seconds),
             font: font.unwrap(),
             message: message_arg,
             negative: false,
@@ -120,20 +106,20 @@ impl Widget for &App<'_> {
             5.min(area.height),
         );
 
-        let string = match (self.hours, self.minutes) {
-            (0, 0) => format!("{}{}", if self.negative { "-" } else { "" }, self.seconds),
+        let string = match (self.counter.hours(), self.counter.minutes()) {
+            (0, 0) => format!("{}{}", if self.negative { "-" } else { "" }, self.counter.seconds()),
             (0, _) => format!(
                 "{}{}:{:02}",
                 if self.negative { "-" } else { "" },
-                self.minutes,
-                self.seconds
+                self.counter.minutes(),
+                self.counter.seconds()
             ),
             _ => format!(
                 "{}{}:{:02}:{:02}",
                 if self.negative { "-" } else { "" },
-                self.hours,
-                self.minutes,
-                self.seconds
+                self.counter.hours(),
+                self.counter.minutes(),
+                self.counter.seconds()
             ),
         };
 
