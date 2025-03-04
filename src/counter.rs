@@ -1,4 +1,4 @@
-use crate::quit::AppEvent;
+use crate::events::AppEvent;
 
 use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedSender};
@@ -34,7 +34,7 @@ pub fn start_ticking(sender: UnboundedSender<AppEvent>) {
         interval.tick().await;
         loop {
             interval.tick().await;
-            sender.send(AppEvent::TickEvent).unwrap();
+            sender.send(AppEvent::Tick).unwrap();
         }
     });
 }

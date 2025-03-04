@@ -1,13 +1,13 @@
 mod cli;
 mod counter;
-mod quit;
+mod events;
 mod tui;
 
 use anyhow::{anyhow, Context};
 use clap::Parser;
 use counter::{start_ticking, Counter};
 use figlet_rs::FIGfont;
-use quit::{AppEvent, Quit};
+use events::*;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -18,13 +18,13 @@ use ratatui::{
 };
 use soloud::*;
 use std::path::Path;
-use std::sync::{self, Arc};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 #[derive(Debug)]
 pub struct App<'a> {
     counter: Counter,
     negative: bool,
+    is_running: bool,
     font: FIGfont,
     message: &'a str,
 }
@@ -35,13 +35,12 @@ impl<'a> App<'a> {
         terminal: &mut tui::Tui,
         mut receiver: UnboundedReceiver<AppEvent>,
         sender: UnboundedSender<AppEvent>,
-        quit: Arc<Quit>,
         soloud: Soloud,
         wav: Wav,
     ) -> anyhow::Result<()> {
         let handle_app_events = |app: &mut Self, event: AppEvent| -> anyhow::Result<()> {
             match event {
-                AppEvent::TickEvent => {
+                AppEvent::Tick => {
                     app.counter.count -= 1;
                     
                     if app.counter.count == -1 {
@@ -51,8 +50,11 @@ impl<'a> App<'a> {
                         soloud.play(&wav);
                     }
                 }
-                AppEvent::ErrorEvent => {
+                AppEvent::Error => {
                     return Err(anyhow!("Failed to read keypress event."));
+                }
+                AppEvent::Quit => {
+                    app.quit()
                 }
             }
 
@@ -61,7 +63,7 @@ impl<'a> App<'a> {
 
         start_ticking(sender);
 
-        while !quit.bool.load(sync::atomic::Ordering::Relaxed) {
+        while self.is_running {
             if let Ok(event) = receiver.try_recv() {
                 handle_app_events(self, event)?
             };
@@ -78,6 +80,10 @@ impl<'a> App<'a> {
         frame.render_widget(ratatui::widgets::Clear, frame.area());
         frame.render_widget(self, frame.area());
     }
+    
+    fn quit(&mut self) {
+        self.is_running = false;
+    }
 
     fn new(
         font: Result<FIGfont, String>,
@@ -91,6 +97,7 @@ impl<'a> App<'a> {
         Ok(Self {
             counter: Counter::new(seconds),
             font: font.unwrap(),
+            is_running: true,
             message: message_arg,
             negative: false,
         })
@@ -159,8 +166,7 @@ async fn main() -> anyhow::Result<()> {
     wav.load(&Path::new("audio/tone.wav"))?;
 
     let (s, r) = unbounded_channel::<AppEvent>();
-
-    let quit = Quit::default().handle_events(s.clone());
+    handle_crossterm_events(s.clone());
 
     let parsed_args = cli::args::Args::parse();
     let (seconds, message) = parsed_args.handle_command().context("Bad argument.")?;
@@ -172,7 +178,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut terminal = tui::init().context("Failed to start new terminal.")?;
 
-    let app_result = App::new(font, message, seconds)?.run(&mut terminal, r, s, quit, sl, wav);
+    let app_result = App::new(font, message, seconds)?.run(&mut terminal, r, s, sl, wav);
 
     if let Err(e) = tui::restore() {
         return Err(anyhow!("Failed to restore terminal: {}", e));
